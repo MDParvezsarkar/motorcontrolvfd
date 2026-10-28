@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VFD Speed Control – PLC + HMI</title>
+<style>
+:root{--bg:#f4f6f9;--panel:#fff;--fg:#1b2430;--muted:#5b6675;--line:#b8c1cc;--off:#c3cad3;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f141a;--panel:#1a222c;--fg:#e6ebf1;--muted:#93a0b0;--line:#3a4756;--off:#3a4552}}
+:root[data-theme="dark"]{--bg:#0f141a;--panel:#1a222c;--fg:#e6ebf1;--muted:#93a0b0;--line:#3a4756;--off:#3a4552}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;padding:10px 16px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+h1{font-size:18px;margin:0 0 2px}.sub{color:var(--muted);margin:0 0 10px;font-size:13px}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 470px;gap:14px}aside{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;font-size:15px}aside .stats,aside .leg{margin:0}
+svg{width:100%;height:100%;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;display:block}
+svg text{fill:var(--fg);font-family:system-ui,sans-serif}.m{fill:var(--muted)!important}
+.box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.w{fill:none;stroke-width:4.5;stroke-linecap:round;stroke:var(--off)}
+.r{--c:#e53935}.y{--c:#f2b705}.b{--c:#1e88e5}.o{--c:#fb8c00}
+.on .w,.w.on{stroke:var(--c);stroke-dasharray:9 7;animation:fl .5s linear infinite}
+@keyframes fl{to{stroke-dashoffset:-16}}
+.cl,.bus{fill:none;stroke:var(--off);stroke-width:2;stroke-dasharray:5 4}
+.cl.on,.bus.on{stroke:#2e9e4f;animation:fl .6s linear infinite}
+.tag rect{fill:var(--panel);stroke:var(--line)}.tag text{font-size:10px;font-weight:700;text-anchor:middle}
+.tag.on rect{fill:#2e9e4f;stroke:#2e9e4f}.tag.on text{fill:#fff}
+.led{fill:var(--off);stroke:var(--line)}.led.on{fill:#2e9e4f;filter:drop-shadow(0 0 4px #2e9e4f)}.led.am.on{fill:#fb8c00;filter:drop-shadow(0 0 4px #fb8c00)}
+.btn{cursor:pointer}.btn:active{opacity:.7}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.st{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.st b{display:block;font-size:20px}.st span{color:var(--muted);font-size:12px}
+.steps{display:grid;grid-template-columns:1fr;gap:8px}.st b{font-size:24px}.step h3{font-size:16px}.step p{font-size:14px}
+.ex{background:var(--panel);border:2px solid #fb8c00;border-radius:8px;padding:10px 12px;font-size:13.5px}.ex h3{margin:0 0 4px;font-size:15px}.ex p{margin:0 0 6px;color:var(--muted)}
+.br{display:grid;grid-template-columns:118px 1fr 52px;gap:6px;align-items:center;margin:3px 0;font-size:12.5px}.br i{display:block;height:10px;border-radius:5px;background:var(--off)}.br i u{display:block;height:100%;border-radius:5px;text-decoration:none;transition:width .3s}.br b{text-align:right}
+.ex ul{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:12.5px}.ex li{margin:2px 0}.ex li b{color:var(--fg)}
+@media (max-width:1000px){body{height:auto;overflow:auto}main{display:block}svg{height:auto}aside{margin-top:10px}}
+.step{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:10px;opacity:.6}
+.step.act{opacity:1;border-color:#2e9e4f}.step h3{margin:0 0 4px;font-size:14px}.step p{margin:0;font-size:12.5px;color:var(--muted)}
+.leg{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;font-size:12.5px}.leg i{display:inline-block;width:22px;height:4px;vertical-align:middle;margin-right:5px;border-radius:2px}
+#gOF.on .w,#gOR.on .w{animation-duration:var(--fd,.5s)}.dc1{--c:#fb8c00}.dc2{--c:#8e24aa}.bl{--c:#29b6f6}
+.pl{fill:none;stroke:var(--line);stroke-width:1.5}.vl{font-size:10px}
+</style></head><body>
+<h1>VFD Speed Control — PLC + Push-button + HMI</h1>
+<p class="sub">Press FWD / REV / STOP on the operator panel or the HMI, change speed with ▲▼, and watch each step.</p>
+<main><svg preserveAspectRatio="xMidYMid meet" viewBox="0 0 920 660" role="img" aria-label="VFD speed control animation">
+<text x="260" y="16" text-anchor="middle" font-size="12" font-weight="700">POWER CIRCUIT: SUPPLY → VFD → MOTOR</text>
+<g font-size="12" font-weight="700" text-anchor="middle"><text x="60" y="34" style="fill:#e53935">L1</text><text x="90" y="34" style="fill:#f2b705">L2</text><text x="120" y="34" style="fill:#1e88e5">L3</text></g>
+<g class="on"><path class="w r" d="M60 42V105"/><path class="w y" d="M90 42V105"/><path class="w b" d="M120 42V105"/></g>
+<rect class="box" x="40" y="58" width="100" height="26" rx="4"/><text x="134" y="75" text-anchor="end" font-size="10" class="m">MCCB</text>
+<rect class="box" x="40" y="94" width="170" height="44" rx="4"/>
+<g stroke-width="4" stroke-linecap="round"><circle cx="60" cy="105" r="3.5" fill="#e53935"/><circle cx="60" cy="130" r="3.5" fill="#e53935"/><line id="b0" x1="60" y1="130" x2="60" y2="105" stroke="#e53935"/><circle cx="90" cy="105" r="3.5" fill="#f2b705"/><circle cx="90" cy="130" r="3.5" fill="#f2b705"/><line id="b1" x1="90" y1="130" x2="90" y2="105" stroke="#f2b705"/><circle cx="120" cy="105" r="3.5" fill="#1e88e5"/><circle cx="120" cy="130" r="3.5" fill="#1e88e5"/><line id="b2" x1="120" y1="130" x2="120" y2="105" stroke="#1e88e5"/></g>
+<rect class="box" x="30" y="158" width="332" height="162" rx="6"/><text x="36" y="170" font-size="10" font-weight="700" class="m">VFD (FREQUENCY INVERTER)</text>
+<rect class="box" x="40" y="182" width="100" height="80" rx="4"/><text x="90" y="256" text-anchor="middle" font-size="9" class="m">RECTIFIER AC→DC</text>
+<g id="gIn"><path class="w r" d="M60 130V232"/><path class="w y" d="M90 130V232"/><path class="w b" d="M120 130V232"/></g>
+
+<rect class="box" x="150" y="182" width="100" height="80" rx="4"/><text x="200" y="196" text-anchor="middle" font-size="9" class="m">DC BUS</text><text x="200" y="256" text-anchor="middle" font-size="9" class="m">≈ 560 V DC</text>
+<rect class="box" x="262" y="182" width="90" height="80" rx="4"/><text x="307" y="196" text-anchor="middle" font-size="9" class="m">INVERTER</text><text x="307" y="256" text-anchor="middle" font-size="9" class="m">IGBT · PWM</text>
+<rect class="box" x="40" y="270" width="312" height="42" rx="4"/><text x="46" y="283" font-size="9" class="m">CONTROL BOARD</text><text x="46" y="303" font-size="10">V/f · ramp · protection</text>
+<g id="gDC"><path class="w dc1" d="M140 214H262"/><path class="w dc2" d="M140 240H262"/></g>
+<path d="M200 214V224M190 224H210M190 230H210M200 230V240" stroke="var(--fg)" stroke-width="2" fill="none"/>
+<g id="gOF"><path class="w r" d="M280 262V400"/><path class="w y" d="M307 262V400"/><path class="w b" d="M334 262V400"/></g>
+<g id="gOR"><path class="w r" d="M280 262V400"/><path class="w b" d="M307 262V400"/><path class="w y" d="M334 262V400"/></g>
+<g fill="var(--panel)" stroke="var(--fg)" stroke-width="2"><circle cx="280" cy="345" r="5"/><circle cx="307" cy="345" r="5"/><circle cx="334" cy="345" r="5"/></g>
+<g font-size="10" class="m"><text x="268" y="341" text-anchor="end">U</text><text x="318" y="338">V</text><text x="345" y="341">W</text></g>
+<g font-size="10" font-weight="700" fill="var(--fg)"><circle cx="190" cy="116" r="12" class="led" id="k0c"/><text x="190" y="119" text-anchor="middle" font-size="9" font-weight="700">KM1</text></g>
+<text x="48" y="106" font-size="8" class="m">LINE</text>
+<rect class="box" x="368" y="158" width="122" height="162" rx="6"/><text x="374" y="172" font-size="10" font-weight="700" class="m">VFD KEYPAD</text>
+<text x="374" y="190" font-size="9" class="m">OUTPUT FREQUENCY</text><text id="vF" x="374" y="213" font-size="22" font-weight="700">0.0 Hz</text>
+<text x="374" y="231" font-size="9" class="m">VOLTAGE · CURRENT</text><text id="vV" x="374" y="247" font-size="13" font-weight="700">0 V · 0.0 A</text>
+<text x="374" y="265" font-size="9" class="m">STATUS</text><text id="vS" x="374" y="281" font-size="12" font-weight="700">READY</text>
+<g class="btn" onclick="act('z','Keypad')"><rect x="376" y="292" width="106" height="20" rx="5" fill="#d32f2f"/><text x="429" y="306" text-anchor="middle" font-size="10" font-weight="700" style="fill:#fff">TEST OL FAULT</text></g>
+<circle cx="307" cy="440" r="36" class="box"/>
+<g id="rot"><line x1="307" y1="408" x2="307" y2="472" stroke="#7a8696" stroke-width="5" stroke-linecap="round"/><line x1="275" y1="440" x2="339" y2="440" stroke="#7a8696" stroke-width="5" stroke-linecap="round"/><polygon points="307,404 317,412 307,418" fill="#fb8c00"/></g>
+<circle cx="307" cy="440" r="13" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/><text x="307" y="444" text-anchor="middle" font-size="12" font-weight="700">M</text>
+<text x="352" y="424" font-size="11" class="m">3~ motor 5.5 kW</text><text id="mRpm" x="352" y="450" font-size="26" font-weight="700">0 rpm</text><text id="mDir" x="352" y="468" font-size="12" font-weight="700">STOPPED</text>
+<g id="k0txt"></g>
+<rect class="box" x="20" y="490" width="240" height="162" rx="6"/><text x="28" y="505" font-size="10" class="m">V/f CURVE (voltage follows frequency)</text>
+<path d="M52 635V516M52 635H240" stroke="var(--fg)" fill="none"/><path d="M52 625L240 518" stroke="#8e24aa" stroke-width="2" fill="none" stroke-dasharray="4 3"/>
+<text x="240" y="648" text-anchor="end" font-size="9" class="m">50 Hz</text><text x="48" y="525" text-anchor="end" font-size="9" class="m">400 V</text><text x="48" y="635" text-anchor="end" font-size="9" class="m">0</text>
+<circle id="vfd" cx="52" cy="635" r="6" fill="#fb8c00" stroke="var(--fg)" stroke-width="1.5"/>
+<rect class="box" x="270" y="490" width="230" height="162" rx="6"/><text x="278" y="505" font-size="10" class="m">OUTPUT VOLTAGE WAVES U-V-W (live)</text>
+<line x1="280" x2="492" y1="580" y2="580" stroke="var(--line)"/>
+<path id="wv0" fill="none" stroke="#e53935" stroke-width="2"/><path id="wv1" fill="none" stroke="#f2b705" stroke-width="2"/><path id="wv2" fill="none" stroke="#1e88e5" stroke-width="2"/>
+<text id="wvT" x="278" y="646" font-size="10" class="m">no output</text>
+<path class="cl" id="c0" d="M540 330H520V116H202"/><path class="cl" id="c1" d="M540 352H510V146H230V158"/><path class="cl" id="c2" d="M540 374H504V150H250V158"/><path class="cl" id="c3" d="M540 408H498V154H270V158"/>
+<text x="230" y="143" text-anchor="middle" font-size="8" class="m">DI1</text>
+<rect class="box" x="540" y="20" width="360" height="92" rx="8"/><text x="552" y="38" font-size="12" font-weight="700">OPERATOR PANEL (field)</text>
+<g class="btn" onclick="act('f','Push-button')"><circle cx="566" cy="68" r="15" fill="#2e9e4f"/><text x="566" y="71" text-anchor="middle" font-size="8" font-weight="700" style="fill:#fff">FWD</text><text x="566" y="96" text-anchor="middle" font-size="8" class="m">forward</text></g><g class="btn" onclick="act('r','Push-button')"><circle cx="610" cy="68" r="15" fill="#1e88e5"/><text x="610" y="71" text-anchor="middle" font-size="8" font-weight="700" style="fill:#fff">REV</text><text x="610" y="96" text-anchor="middle" font-size="8" class="m">reverse</text></g><g class="btn" onclick="act('s','Push-button')"><circle cx="654" cy="68" r="15" fill="#d32f2f"/><text x="654" y="71" text-anchor="middle" font-size="8" font-weight="700" style="fill:#fff">STOP</text><text x="654" y="96" text-anchor="middle" font-size="8" class="m">stop</text></g><g class="btn" onclick="act('x','Push-button')"><circle cx="698" cy="68" r="15" fill="#607d8b"/><text x="698" y="71" text-anchor="middle" font-size="8" font-weight="700" style="fill:#fff">RST</text><text x="698" y="96" text-anchor="middle" font-size="8" class="m">reset</text></g><g class="btn" onclick="act('u','Push-button')"><circle cx="742" cy="68" r="15" fill="#00897b"/><text x="742" y="71" text-anchor="middle" font-size="11" font-weight="700" style="fill:#fff">▲</text><text x="742" y="96" text-anchor="middle" font-size="8" class="m">speed +</text></g><g class="btn" onclick="act('d','Push-button')"><circle cx="786" cy="68" r="15" fill="#00897b"/><text x="786" y="71" text-anchor="middle" font-size="11" font-weight="700" style="fill:#fff">▼</text><text x="786" y="96" text-anchor="middle" font-size="8" class="m">speed −</text></g>
+<circle id="lmR" class="led" cx="840" cy="62" r="7"/><text x="840" y="88" text-anchor="middle" font-size="8" class="m">RUN</text>
+<circle id="lmF" class="led am" cx="876" cy="62" r="7"/><text x="876" y="88" text-anchor="middle" font-size="8" class="m">FAULT</text>
+<rect class="box" x="540" y="124" width="360" height="148" rx="8"/><text x="552" y="142" font-size="12" font-weight="700">HMI TOUCH PANEL</text>
+<rect x="550" y="150" width="165" height="112" rx="4" fill="#102a43"/>
+<text x="558" y="166" font-size="9" style="fill:#9fb3c8">VFD STATE</text><text id="tState" x="558" y="184" font-size="14" font-weight="700" style="fill:#fff">READY</text>
+<text id="tSet" x="558" y="202" font-size="10" style="fill:#9fb3c8">Set 35.0 Hz · Out 0.0 Hz</text>
+<rect x="558" y="209" width="148" height="8" rx="4" fill="#243b53"/><rect id="barF" x="558" y="209" width="0" height="8" rx="4" fill="#29b6f6"/>
+<text id="tMode" x="558" y="238" font-size="11" font-weight="700" style="fill:#fff">Mode: MANUAL</text>
+<g class="btn" onclick="act('d','HMI')"><rect x="636" y="226" width="32" height="22" rx="5" fill="#00897b"/><text x="652" y="243" text-anchor="middle" font-size="16" font-weight="700" style="fill:#fff">−</text></g>
+<g class="btn" onclick="act('u','HMI')"><rect x="674" y="226" width="32" height="22" rx="5" fill="#00897b"/><text x="690" y="243" text-anchor="middle" font-size="15" font-weight="700" style="fill:#fff">+</text></g>
+<text id="tSrc" x="558" y="257" font-size="10" style="fill:#9fb3c8">Last cmd: –</text>
+<g class="btn" onclick="act('f','HMI')"><rect x="725" y="150" width="165" height="24" rx="7" fill="#2e9e4f"/><text x="807" y="167" text-anchor="middle" font-size="12" font-weight="700" style="fill:#fff">HMI FORWARD</text></g><g class="btn" onclick="act('r','HMI')"><rect x="725" y="178" width="165" height="24" rx="7" fill="#1e88e5"/><text x="807" y="195" text-anchor="middle" font-size="12" font-weight="700" style="fill:#fff">HMI REVERSE</text></g><g class="btn" onclick="act('s','HMI')"><rect x="725" y="206" width="165" height="24" rx="7" fill="#d32f2f"/><text x="807" y="223" text-anchor="middle" font-size="12" font-weight="700" style="fill:#fff">HMI STOP</text></g><g class="btn" onclick="act('a','HMI')"><rect x="725" y="234" width="165" height="24" rx="7" fill="#fb8c00"/><text x="807" y="251" text-anchor="middle" font-size="12" font-weight="700" style="fill:#fff">MANUAL / AUTO (PID)</text></g>
+<rect class="box" x="540" y="288" width="360" height="209" rx="8"/><text x="720" y="304" text-anchor="middle" font-size="12" font-weight="700">PLC CONTROL UNIT</text>
+<text x="555" y="318" font-size="9" class="m">OUTPUTS</text><text x="712" y="318" font-size="9" class="m">INPUTS</text>
+<g font-size="11"><circle id="o0" class="led" cx="555" cy="330" r="7"/><text x="568" y="334">Q0.0 → KM1 line</text><circle id="o1" class="led" cx="555" cy="352" r="7"/><text x="568" y="356">Q0.1 → VFD run FWD</text><circle id="o2" class="led" cx="555" cy="374" r="7"/><text x="568" y="378">Q0.2 → VFD run REV</text><circle id="i0" class="led" cx="715" cy="330" r="7"/><text x="728" y="334">I0.0 FWD PB</text><circle id="i1" class="led" cx="715" cy="350" r="7"/><text x="728" y="354">I0.1 REV PB</text><circle id="i2" class="led" cx="715" cy="370" r="7"/><text x="728" y="374">I0.2 STOP PB</text><circle id="i3" class="led" cx="715" cy="390" r="7"/><text x="728" y="394">I0.3 RESET PB</text><circle id="i4" class="led" cx="715" cy="410" r="7"/><text x="728" y="414">I0.4 SPEED UP</text><circle id="i5" class="led" cx="715" cy="430" r="7"/><text x="728" y="434">I0.5 SPEED DOWN</text><circle id="i6" class="led" cx="715" cy="450" r="7"/><text x="728" y="454">I0.6 HMI COMMAND</text><circle id="i7" class="led" cx="715" cy="470" r="7"/><text x="728" y="474">I0.7 VFD FAULT</text></g>
+<text x="555" y="402" font-size="10">AQ0.0 speed ref</text><rect x="555" y="408" width="140" height="8" rx="4" fill="var(--off)"/><rect id="aqB" x="555" y="408" width="0" height="8" rx="4" fill="#00897b"/><text id="aqT" x="695" y="402" text-anchor="end" font-size="10" font-weight="700">0.0 V</text>
+<text x="555" y="436" font-size="10">AI0.0 pressure</text><rect x="555" y="442" width="140" height="8" rx="4" fill="var(--off)"/><rect id="aiB" x="555" y="442" width="0" height="8" rx="4" fill="#29b6f6"/><text id="aiT" x="695" y="436" text-anchor="end" font-size="10" font-weight="700">4.0 mA</text>
+<circle id="mA" class="led am" cx="555" cy="470" r="7"/><text x="568" y="474" font-size="11" font-weight="700">M0.0 AUTO (PID)</text>
+<path class="bus" id="bus" d="M900 62H912V318H900M900 200H912"/>
+<rect class="box" x="540" y="500" width="360" height="152" rx="8"/><text x="552" y="518" font-size="12" font-weight="700">REAL EXAMPLE: BOOSTER PUMP (pressure)</text>
+<g id="gP"><path class="w bl" d="M552 606H572"/><path class="w bl" d="M608 606H650"/></g><g id="gC"><path class="w bl" d="M690 606H836"/></g>
+<circle cx="590" cy="606" r="18" class="box"/><g id="imp"><line x1="578" y1="606" x2="602" y2="606" stroke="#7a8696" stroke-width="4" stroke-linecap="round"/><line x1="590" y1="594" x2="590" y2="618" stroke="#7a8696" stroke-width="4" stroke-linecap="round"/></g><circle cx="590" cy="606" r="4" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+<text x="590" y="640" text-anchor="middle" font-size="9" class="m">Pump on VFD</text>
+<rect id="vw" x="652" y="630" width="36" height="0" fill="#29b6f6" opacity=".6"/><rect x="650" y="548" width="40" height="84" rx="6" fill="none" stroke="var(--fg)" stroke-width="2.5"/><text x="670" y="544" text-anchor="middle" font-size="9" class="m">pressure vessel</text>
+<circle cx="750" cy="574" r="30" class="box"/><path d="M750 574m-26 15A30 30 0 1 1 776 589" fill="none" stroke="var(--line)" stroke-width="3"/><line x1="750" y1="540" x2="750" y2="546" stroke="#e53935" stroke-width="3"/><line id="ndl" x1="750" y1="574" x2="750" y2="550" stroke="var(--fg)" stroke-width="2.5" stroke-linecap="round"/><circle cx="750" cy="574" r="3.5" fill="var(--fg)"/>
+<text x="750" y="536" text-anchor="middle" font-size="9" class="m">set point 4 bar</text><text id="gPt" x="750" y="626" text-anchor="middle" font-size="12" font-weight="700">0.0 bar</text>
+<text x="860" y="544" text-anchor="middle" font-size="9" class="m">CONSUMERS</text>
+<g class="btn" onclick="dem(-.1)"><rect x="826" y="550" width="30" height="20" rx="5" fill="#607d8b"/><text x="841" y="565" text-anchor="middle" font-size="14" font-weight="700" style="fill:#fff">−</text></g>
+<g class="btn" onclick="dem(.1)"><rect x="862" y="550" width="30" height="20" rx="5" fill="#607d8b"/><text x="877" y="565" text-anchor="middle" font-size="14" font-weight="700" style="fill:#fff">+</text></g>
+<text id="dmT" x="860" y="588" text-anchor="middle" font-size="11" font-weight="700">Demand 50 %</text>
+<text x="860" y="640" text-anchor="middle" font-size="9" class="m">to taps / process</text>
+</svg><aside>
+<div class="leg"><span><i style="background:#e53935"></i>L1</span><span><i style="background:#f2b705"></i>L2</span><span><i style="background:#1e88e5"></i>L3</span><span><i style="background:#fb8c00"></i>DC +</span><span><i style="background:#8e24aa"></i>DC −</span><span><i style="background:#2e9e4f"></i>Control signal</span><span><i style="background:#29b6f6"></i>Water</span></div>
+<div class="stats"><div class="st"><b id="sF">0.0 Hz</b><span>Output frequency</span></div><div class="st"><b id="sV">0 V</b><span>Output voltage</span></div><div class="st"><b id="sN">0 rpm</b><span>Motor speed</span></div></div>
+<div class="steps">
+<div class="step" id="p0"><h3>① Ready</h3><p>Line contactor KM1 OFF, DC bus empty. PLC waits for FWD or REV.</p></div>
+<div class="step" id="p1"><h3>② Ramp up</h3><p>PLC closes KM1, then gives the run signal. VFD raises frequency and voltage together (V/f), 10 Hz per second: soft start, low current.</p></div>
+<div class="step" id="p2"><h3>③ Run at set speed</h3><p>Speed follows the set point (▲▼ or HMI +/−). In AUTO the PLC PID holds the pump pressure at 4 bar.</p></div>
+<div class="step" id="p3"><h3>④ Ramp down / fault</h3><p>STOP: VFD ramps to 0 Hz, then KM1 opens. REV: VFD ramps through 0 Hz and turns the other way. Fault: output stops, RESET needed.</p></div>
+</div>
+<div class="ex"><h3>🏭 Real example: Booster pump, apartment building</h3>
+<p>Pump motor <b>5.5 kW, 400 V, In ≈ 11 A</b>. The VFD slows the pump when demand is low, so it saves energy and avoids water hammer.</p>
+<ul><li><b>VFD 7.5 kW</b> (one size up), <b>MCCB 16 A</b>, <b>line contactor 12 A</b></li>
+<li><b>Accel / decel 5 s</b>, min 15 Hz, max 50 Hz, linear V/f</li>
+<li><b>Pressure sensor 4–20 mA</b> (0–10 bar) → PLC AI0.0, PID set point 4 bar</li>
+<li>Pump speed ∝ √(head): at 40 Hz the power is only about half of 50 Hz</li>
+<li>Wrong rotation gives almost no pressure: press REV and see</li></ul></div>
+<p class="sub">Press FWD, change the speed with ▲▼, then try REV and MANUAL / AUTO (PID). Use the − / + buttons to change the water demand.</p>
+</aside></main>
+<script>
+const $=id=>document.getElementById(id),tg=(id,c)=>$(id).classList.toggle('on',!!c),tg2=(id,c)=>{const e=$(id);e.style.display=c?'':'none';e.classList.toggle('on',!!c)};
+const S={kmL:0,run:0,dir:1,delay:0,off:0,set:35,f:0,fault:0,auto:0,I:0,P:0,dem:.5,ph:0,ang:0,src:'–',ramp:0,cur:0},lit={};
+function run(k,src){S.src=src;
+ if(k==='z'){if(S.kmL&&!S.fault){S.fault=1;S.run=0}return}
+ if(k==='x'){S.fault=0;return}
+ if(S.fault)return;
+ if(k==='s'){S.run=0;S.delay=0;return}
+ if(k==='u'){S.set=Math.min(50,S.set+2.5);return}if(k==='d'){S.set=Math.max(5,S.set-2.5);return}
+ if(k==='a'){S.auto=S.auto?0:1;S.I=0;return}
+ const d=k==='f'?1:-1;S.dir=d;S.off=0;if(!S.kmL){S.kmL=1;S.delay=.6;S.run=0}else S.run=d}
+function act(k,src){const h=src==='HMI';lit[h?'i6':({f:'i0',r:'i1',s:'i2',x:'i3',u:'i4',d:'i5'})[k]]=Date.now()+700;run(k,src)}
+function dem(d){S.dem=Math.max(0,Math.min(1,+(S.dem+d).toFixed(1)))}
+let last=performance.now(),T=0;
+function frame(now){
+ const dt=Math.min(.05,(now-last)/1000);last=now;T+=dt;
+ if(S.delay>0){S.delay-=dt;if(S.delay<=0)S.run=S.dir}
+ let tgt=S.set;
+ if(S.auto&&S.run&&!S.fault){const e=4-S.P;S.I=Math.max(-15,Math.min(15,S.I+3*e*dt));tgt=Math.max(15,Math.min(50,30+8*e+S.I))}
+ const ref=(S.run&&!S.fault)?S.run*tgt:0;
+ if(S.fault){S.f*=Math.exp(-dt/2.5);S.ramp=0}else{const df=ref-S.f,mx=10*dt;S.ramp=Math.abs(df)>.05?1:0;S.f+=Math.abs(df)<=mx?df:Math.sign(df)*mx}
+ if(!S.run&&!S.fault&&S.kmL&&Math.abs(S.f)<.3&&S.delay<=0){S.off+=dt;if(S.off>1){S.kmL=0;S.off=0;S.f=0}}
+ const af=Math.abs(S.f),out=S.kmL&&af>.3,V=out?25+375*af/50:0;
+ S.cur=out?11*(.28+.72*Math.pow(af/50,2))+(S.ramp?2.5:0):0;
+ const rpm=S.f*30*.97;S.ang=(S.ang+rpm*.45*dt)%360;S.ph+=af*.9*dt;
+ const H=6.5*Math.pow(af/50,2)*(S.f>0?1:.15),Pe=H*(1-.55*S.dem);S.P+=(Pe-S.P)*(1-Math.exp(-dt/1.2));
+ const ft=S.f>=0;
+ tg('gIn',S.kmL);tg('gDC',S.kmL);tg2('gOF',out&&ft);tg2('gOR',out&&!ft);
+ $('gOF').style.setProperty('--fd',Math.max(.45,Math.min(2.6,22/Math.max(af,5)))+'s');$('gOR').style.setProperty('--fd',$('gOF').style.getPropertyValue('--fd'));
+ [60,90,120].forEach((x,i)=>{const b=$('b'+i);b.setAttribute('x2',S.kmL?x:x+12);b.setAttribute('y2',S.kmL?105:110)});
+ $('k0c').classList.toggle('on',S.kmL);tg('c0',S.kmL);tg('o0',S.kmL);tg('o1',S.run>0&&!S.fault);tg('o2',S.run<0&&!S.fault);tg('c1',S.run>0&&!S.fault);tg('c2',S.run<0&&!S.fault);tg('c3',S.run&&!S.fault);
+ const n=Date.now();let any=0;for(let i=0;i<7;i++){const v=lit['i'+i]>n;any|=v;tg('i'+i,v)}tg('i7',S.fault);tg('bus',any);
+ tg('lmR',out&&!S.fault);tg('lmF',S.fault);tg('mA',S.auto);
+ const sp=S.f>0.3?'FORWARD':S.f<-.3?'REVERSE':'STOPPED';
+ let st;if(S.fault)st='FAULT OL-01';else if(!S.kmL)st='READY (line off)';else if(S.delay>0)st='LINE ON · starting';else if(!S.run)st=af>.3?'RAMP DOWN':'STOPPED';
+ else{const r=Math.abs(ref-S.f);st=r>.3?(Math.sign(ref)!==Math.sign(S.f)&&af>.5?'REVERSING via 0 Hz':(Math.abs(ref)>af?'RAMP UP':'RAMP DOWN')):'RUNNING '+(S.run>0?'FWD':'REV')}
+ $('vF').textContent=af.toFixed(1)+' Hz';$('vV').textContent=Math.round(V)+' V · '+S.cur.toFixed(1)+' A';$('vS').textContent=S.fault?'FAULT OL-01':st.toUpperCase().slice(0,16);
+ $('vS').style.fill=S.fault?'#e53935':'';
+ $('tState').textContent=st;$('tSet').textContent='Set '+(S.auto?'AUTO':S.set.toFixed(1)+' Hz')+' · Out '+af.toFixed(1)+' Hz';$('barF').setAttribute('width',148*af/50);
+ $('tMode').textContent='Mode: '+(S.auto?'AUTO (PID)':'MANUAL');$('tSrc').textContent='Last cmd: '+S.src;
+ $('mRpm').textContent=Math.round(Math.abs(rpm))+' rpm';$('mDir').textContent=sp;$('sF').textContent=af.toFixed(1)+' Hz';$('sV').textContent=Math.round(V)+' V';$('sN').textContent=Math.round(Math.abs(rpm))+' rpm';
+ $('rot').setAttribute('transform','rotate('+S.ang+' 307 440)');$('imp').setAttribute('transform','rotate('+S.ang+' 590 606)');
+ const aq=S.run&&!S.fault?tgt/50*10:0;$('aqB').setAttribute('width',140*aq/10);$('aqT').textContent=aq.toFixed(1)+' V';
+ const ma=4+16*S.P/10;$('aiB').setAttribute('width',140*(ma-4)/16);$('aiT').textContent=ma.toFixed(1)+' mA';
+ $('vfd').setAttribute('cx',52+188*af/50);$('vfd').setAttribute('cy',635-117*(out?(V/400):0));
+ const idx=S.fault||(S.run===0&&S.kmL&&af>.3)?3:!S.kmL&&!S.fault?0:S.ramp?1:2;
+ for(let i=0;i<4;i++)$('p'+i).classList.toggle('act',i===idx);
+ const cyc=af/10,A=out?52*V/400+6:0,pp=[0,ft?-2.0944:2.0944,ft?-4.1888:-2.0944],col=['#e53935',ft?'#f2b705':'#1e88e5',ft?'#1e88e5':'#f2b705'];
+ for(let k=0;k<3;k++){let d='';for(let i=0;i<=80;i++){const x=282+i*210/80,y=580-A*Math.sin(2*Math.PI*cyc*i/80-S.ph*2+pp[k]);d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)}$('wv'+k).setAttribute('d',d);$('wv'+k).setAttribute('stroke',col[k])}
+ $('wvT').textContent=out?'f = '+af.toFixed(1)+' Hz · amplitude '+Math.round(V)+' V · sequence '+(ft?'U-V-W':'U-W-V'):'no output';
+ const a=(-120+240*Math.min(S.P,8)/8)*Math.PI/180;$('ndl').setAttribute('x2',750+24*Math.sin(a));$('ndl').setAttribute('y2',574-24*Math.cos(a));$('gPt').textContent=S.P.toFixed(1)+' bar';
+ const h=84*Math.min(S.P,8)/8;$('vw').setAttribute('y',630-h);$('vw').setAttribute('height',Math.max(0,h-2));
+ tg('gP',af>3);tg('gC',S.P>.2&&S.dem>0);$('dmT').textContent='Demand '+Math.round(S.dem*100)+' %';
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+</script></body></html>
